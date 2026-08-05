@@ -113,9 +113,16 @@ rewrites the threading epilogue **in place** with the real control transfer:
 | indirect call | `call reg ; jmp continuation` |
 
 The 12-30 byte threading epilogue always has room for these (5-15 bytes), so no relocation is
-needed. **86,597 dispatch blocks de-threaded; ~10 complex blocks conservatively
-left threaded.** Strictly audited: 0 body corruption, 0 flag issues. The result reads with explicit
-native control flow in **any** decompiler.
+needed. **87,424 dispatch blocks de-threaded; 26 conservatively left threaded** (22 fail the
+frame-teardown safety gate, 4 unclassifiable). Strictly audited: 0 body corruption, 0 flag issues.
+The result reads with explicit native control flow in **any** decompiler.
+
+Blocks are seeded from the `.pdata` exception directory **and** the CFG successor map, not the map
+alone. A flow traversal only reaches functions some edge names, so any function reached only by a
+virtual/indirect call was never visited and stayed `ret`-threaded - which a decompiler renders as an
+empty `LOCK/UNLOCK` stub. `.pdata` is the ground-truth x64 function table (113,805 entries),
+so unioning it in leaves no function threaded, and a plain decompiler auto-analysis (no scripts)
+rebuilds the whole image.
 
 ---
 
@@ -154,10 +161,10 @@ What the tools require of that dump:
 
 **Final output = `dethread_pe.bin`**: on top of the de-mutation, `tools/dethread.py` replaces
 VMProtect's control-flow-flattening (every block dispatches through a threaded `ret`) with native
-`jmp`/`jcc`/`call` **in place** - 86,597 dispatch blocks so the control flow is explicit and 
-traceable in **any** decompiler (Ghidra, IDA, Binary Ninja, objdump)
-with zero tool-specific setup. Strictly audited across all patched blocks: 0 body corruption, 0
-flag issues.
+`jmp`/`jcc`/`call` **in place** - 87,424 dispatch blocks (seeded from `.pdata` + the CFG map, so no
+function is left threaded) so the control flow is explicit and traceable in **any** decompiler
+(Ghidra, IDA, Binary Ninja, objdump) with zero tool-specific setup. Strictly audited across all
+patched blocks: 0 body corruption, 0 flag issues.
 
 ## Options & outputs
 
@@ -255,8 +262,8 @@ trust the rewrite; the semantic run is how it was originally validated.
   de-thread now emits real `call`/`jmp` edges, so a decompiler's own auto-analysis recovers most
   functions - but boundary recovery in the 81 MB section is still imperfect; expect some over/under-
   split functions.
-* ~10 blocks are left threaded (complex frame-teardown + dispatch epilogues, skipped to avoid
-  corruption). A decompiler reads those ~10 `ret`s as returns - negligible, and their targets are
+* 26 blocks are left threaded (frame-teardown + unclassifiable dispatch epilogues, skipped to avoid
+  corruption). A decompiler reads those 26 `ret`s as returns - negligible, and their targets are
   reached via other de-threaded edges anyway.
 * This image is **ANALYSIS ONLY**: a memory dump with the IAT bound, not a loadable PE, and 612k+
   changed bytes. Run the original game; this is for reading.

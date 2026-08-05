@@ -50,6 +50,26 @@ def data_directory(d, index):
     return struct.unpack_from("<II", d, pe + 24 + 112 + index * 8)
 
 
+def pdata_functions(d):
+    """Function-start VAs from the PE exception directory (`.pdata`).
+
+    Every x64 PE carries an IMAGE_DIRECTORY_ENTRY_EXCEPTION (index 3): an array of RUNTIME_FUNCTION
+    records, 12 bytes each = (BeginAddress, EndAddress, UnwindData) as RVAs. BeginAddress is an
+    authoritative code start. This is the ground-truth function table -- far more complete than a
+    flow traversal, which misses any function no reachable call/branch names. Seeding the de-threader
+    from these closes the coverage gap that left whole functions threaded (and thus unreadable in a
+    decompiler). Extra/duplicate starts are harmless: the block enumerator dedupes.
+    """
+    B = image_base(d)
+    rva, sz = data_directory(d, 3)
+    out = []
+    for off in range(rva, rva + sz - 11, 12):
+        begin = struct.unpack_from("<I", d, off)[0]
+        if begin:
+            out.append(B + begin)
+    return out
+
+
 def baserelocs(d, src=None):
     """DIR64 relocation addresses from the BASERELOC *data directory*.
 

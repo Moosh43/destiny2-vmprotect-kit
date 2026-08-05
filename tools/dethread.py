@@ -33,6 +33,7 @@ DST = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("-") else 
 os.environ["DEFLAT_IMG"] = SRC
 sys.path.insert(0, HERE)
 import deflatten as D
+import peinfo
 B = D.B
 
 
@@ -130,9 +131,15 @@ def reg_clobbered(reg, epi):
 
 
 def build(d):
-    # enumerate block starts via the same traversal the CFG regen uses
+    # Enumerate block starts. Seed from BOTH the CFG successors AND every .pdata function start.
+    # The successors map is a flow traversal and misses any function no reachable edge names
+    # (e.g. reached only by a virtual/indirect call) -- those stay threaded and decompile to an
+    # empty LOCK/UNLOCK stub. The exception directory is the ground-truth function table, so
+    # unioning it in reaches them. (Build 87221: 86,597 -> 87,424 dispatch blocks converted; the
+    # extra ~800 are whole functions the flow traversal never entered.)
     old = json.load(open(find_data("successors.json")))
     seeds = set(int(t, 16) for v in old.values() for t in v)
+    seeds |= {a for a in peinfo.pdata_functions(d) if D.incode(a)}
     seen = set()
     frontier = seeds
     starts = []
