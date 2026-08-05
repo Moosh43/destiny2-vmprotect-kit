@@ -1,0 +1,22 @@
+# ⛔ Dumps & images carry YOUR runtime state (account/session/machine info) — never commit them.
+*.dmp
+*.core
+core.*
+d2.*.core
+/image.bin
+/devmp.bin
+/devmp*_pe.bin
+/dethread_pe.bin
+/destiny2_*.bin
+
+# Generated pipeline outputs at the repo root (the shipped copies live in data/).
+/successors.json
+/successors.txt
+/successors_v2.*
+/successors_complete.*
+/reloc_boundaries.json
+/reloc_seeds.txt
+/call_targets2.txt
+
+__pycache__/
+*.pyc
