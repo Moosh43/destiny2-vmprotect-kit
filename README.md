@@ -6,8 +6,7 @@ control-flow flattening rewritten to native jumps - so you can read the code in 
 instead of fighting VMProtect.
 
 Everything here is **tooling and derived metadata**. It contains no game code. You run it against
-your own copy and produce the image locally - which is also the only thing that *can* work, for
-the reason below.
+your own copy and produce the image locally.
 
 ---
 
@@ -114,24 +113,14 @@ rewrites the threading epilogue **in place** with the real control transfer:
 | indirect call | `call reg ; jmp continuation` |
 
 The 12-30 byte threading epilogue always has room for these (5-15 bytes), so no relocation is
-needed - the earlier "impossible in place" belief mis-measured the 1-byte `ret` alone. **86,597
-dispatch blocks de-threaded; 78,881 real returns left native; ~10 complex blocks conservatively
+needed. **86,597 dispatch blocks de-threaded; ~10 complex blocks conservatively
 left threaded.** Strictly audited: 0 body corruption, 0 flag issues. The result reads with explicit
-native control flow in **any** decompiler - no plugin, no database annotation.
+native control flow in **any** decompiler.
 
 ---
 
-## The one non-obvious discovery: the relocation table is hidden
+## VMProtect .reloc section
 
-**Do not read the `.reloc` section.** VMProtect leaves a decoy there - 116,914 DIR64 entries, all
-in `.rdata`/`.data`, **zero in code**. Reading it concludes "there are no code relocations", which
-is false.
-
-The real table is the one the **BASERELOC data directory** points at: RVA `0x8955230`, 1,002,984
-bytes, *inside VMProtect's own `.text`*. **441,006 DIR64, 324,064 of them in executable code.**
-
-That is the only ground truth available in the VMP section (`.pdata` covers **0%** of it), and it
-gives, with no emulation:
 * **309,148 authoritative instruction boundaries** - 95.4% of code relocs have `movabs reg,imm64`
   starting at `reloc-2`, and the loader must patch exactly there or the image breaks.
 * **245,572 distinct code targets** = the block-entry / successor set.
@@ -141,10 +130,12 @@ gives, with no emulation:
 
 ## Pipeline - packed exe to analysis target
 
+**Dump a bone-stock client.** Vanilla only; no memory modifications of any kind. 
+Dump stock and there is nothing to undo.
+
 **Step 0 is not optional and the kit does not ship a dumper.** The on-disk exe is encrypted
 (above), so you must capture the process image yourself, after the VMProtect stub has decrypted.
-That happens at **process entry** - no internet, server, or sign-in required; a stock client that
-merely launches and then fails at a "connecting..." screen is already fully unpacked and dumpable.
+That happens at **process entry**; a stock client that reaches the "Press [enter] to Play" is dump-able. 
 What the tools require of that dump:
 
 * a **full process image of `destiny2.exe`**, laid out so that **file offset == RVA**
@@ -161,17 +152,12 @@ What the tools require of that dump:
   sections are decrypted
 * build 87221 produces exactly **145,010,688 bytes**
 
-**Dump a bone-stock client.** Vanilla - no `version.dll` DLL-redirect, no memory-patcher, no VEH
-- so `.text` is stock by construction. Only the memory-patcher writes `.text` code, and that is the
-only thing this kit cares about; `version.dll`'s changes are `.data`-only and don't touch the
-de-mutated code. Dump stock and there is nothing to undo.
-
 **Final output = `dethread_pe.bin`**: on top of the de-mutation, `tools/dethread.py` replaces
 VMProtect's control-flow-flattening (every block dispatches through a threaded `ret`) with native
-`jmp`/`jcc`/`call` **in place** - 86,597 dispatch blocks (real returns are left native) - so the
-control flow is explicit and traceable in **any** decompiler (Ghidra, IDA, Binary Ninja, objdump)
+`jmp`/`jcc`/`call` **in place** - 86,597 dispatch blocks so the control flow is explicit and 
+traceable in **any** decompiler (Ghidra, IDA, Binary Ninja, objdump)
 with zero tool-specific setup. Strictly audited across all patched blocks: 0 body corruption, 0
-flag issues; ~10 complex blocks are conservatively left threaded rather than risk corruption.
+flag issues.
 
 ## Options & outputs
 
